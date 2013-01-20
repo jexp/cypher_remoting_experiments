@@ -182,14 +182,18 @@ public class ExecutionResultMessagePack implements Iterator<byte[]> {
         if (exception!=null) {
             // TODO log
             exception.printStackTrace();
-            result.put("error",exception.getMessage());
-
-            final StringWriter writer = new StringWriter();
-            exception.printStackTrace(new PrintWriter(writer));
-            result.put("exception", writer.toString());
+            addException(result,exception);
             exception = null;
         }
         return result;
+    }
+
+    public static void addException(Map<String, Object> result,Exception exception) {
+        result.put("error", exception.getMessage());
+
+        final StringWriter writer = new StringWriter();
+        exception.printStackTrace(new PrintWriter(writer));
+        result.put("exception", writer.toString());
     }
 
     private void putIfValue(Map<String, Object> result, String name, int value) {

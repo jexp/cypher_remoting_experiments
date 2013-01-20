@@ -12,6 +12,8 @@ import org.zeromq.ZMQ;
 import java.io.File;
 import java.util.Collections;
 import java.util.Map;
+
+import static org.neo4j.helpers.collection.MapUtil.map;
 /*
 MAVEN_OPTS="-Djava.library.path=/usr/local/lib -Xmx256M -Xms256M -server -d64" mvn exec:java -Dexec.mainClass=de.jexp.zmq.CypherServer -Dexec.args=graph.db
  */
@@ -53,8 +55,11 @@ public class CypherServer {
                         socket.send(next,messagePack.hasNext() ? ZMQ.SNDMORE : 0);
                     }
                 }
-            } catch (InvalidMsgPackDataException e) {
+            } catch (Exception e) {
                 e.printStackTrace();
+                final Map<String, Object> result = map();
+                ExecutionResultMessagePack.addException(result,e);
+                socket.send(MsgPack.pack(result),0);
             }
         }
     }
