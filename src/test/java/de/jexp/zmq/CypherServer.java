@@ -13,8 +13,9 @@ import java.io.File;
 import java.util.Collections;
 import java.util.Map;
 
-public class hwserver {
+public class CypherServer {
     public static void main(String[] args) {
+
         final File directory = new File(args[0]);
         boolean newDB=!directory.exists();
         System.out.println("Using database "+directory+" new "+newDB);
@@ -22,7 +23,7 @@ public class hwserver {
         final ExecutionEngine engine = new ExecutionEngine(db);
         if (newDB) initialize(db);
         Runtime.getRuntime().addShutdownHook(new Thread(){ @Override public void run() { db.shutdown(); } });
-        //  Prepare our context and socket
+
         ZMQ.Context context = ZMQ.context(1);
         ZMQ.Socket socket = context.socket(ZMQ.REP);
         socket.bind ("tcp://*:5555");
