@@ -32,7 +32,7 @@ public class CypherServer {
             byte[] request = socket.recv(0);
             try {
                 final Object data = MsgPack.unpack(request, MsgPack.UNPACK_RAW_AS_STRING);
-                System.out.println(data);
+                // System.out.println(data);
                 ExecutionResult result = null;
                 if (data instanceof String) {
                     result = engine.execute((String) data, Collections.EMPTY_MAP);
