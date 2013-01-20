@@ -12,6 +12,9 @@ import org.zeromq.ZMQ;
 import java.io.File;
 import java.util.Collections;
 import java.util.Map;
+/*
+MAVEN_OPTS="-Djava.library.path=/usr/local/lib -Xmx256M -Xms256M -server -d64" mvn exec:java -Dexec.mainClass=de.jexp.zmq.CypherServer -Dexec.args=graph.db
+ */
 
 public class CypherServer {
     public static void main(String[] args) {

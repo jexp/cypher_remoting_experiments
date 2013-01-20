@@ -5,6 +5,10 @@ import org.zeromq.ZMQ;
 
 import static org.neo4j.helpers.collection.MapUtil.map;
 
+/*
+MAVEN_OPTS="-Djava.library.path=/usr/local/lib" mvn exec:java -Dexec.mainClass=de.jexp.zmq.CypherClient -Dexec.arg="create n={name:'foo'}"
+ */
+
 public class CypherClient {
 
     private static final int ROUNDS = 10000;
