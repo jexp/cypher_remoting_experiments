@@ -55,7 +55,7 @@ public class CypherResultMessagePackTest {
         ExecutionResult result = executionEngine.execute("start n=node(0) match p=n-[r:KNOWS]->m return p,n,r,m,nodes(p) as nodes, rels(p) as rels,length(p) as length");
         for (Map<String, Object> row : result) { }
         result = executionEngine.execute("start n=node(0) match p=n-[r:KNOWS]->m return p,n,r,m,nodes(p) as nodes, rels(p) as rels,length(p) as length");
-        final ExecutionResultMessagePack packedResult = new ExecutionResultMessagePack(result);
+        final ExecutionResultMessagePack packedResult = new ExecutionResultMessagePack(result, false);
         int count=0;
         int row=0;
         while (packedResult.hasNext()) {

@@ -24,6 +24,7 @@ public class ExecutionResultMessagePack implements Iterator<byte[]> {
     private static final int FIRST = Integer.MIN_VALUE;
     private static final int LAST = Integer.MAX_VALUE;
     private final ExecutionResult result;
+    private final boolean stats;
     int row = FIRST;
     private Iterator<Map<String, Object>> it;
     private List<String> columns = null;
@@ -32,8 +33,9 @@ public class ExecutionResultMessagePack implements Iterator<byte[]> {
     private Exception exception;
     private long bytes=0;
 
-    public ExecutionResultMessagePack(ExecutionResult result) {
+    public ExecutionResultMessagePack(ExecutionResult result, boolean stats) {
         this.result = result;
+        this.stats = stats;
         try {
             columns = this.result.columns();
             it = this.result.iterator();
@@ -159,6 +161,10 @@ public class ExecutionResultMessagePack implements Iterator<byte[]> {
     }
 
     private Map<String, Object> info() {
+        if (!stats && exception==null) {
+            row = LAST;
+            return Collections.EMPTY_MAP;
+        }
         final QueryStatistics stats = result.getQueryStatistics();
         final Map<String, Object> result = MapUtil.map(
                 "time", System.currentTimeMillis() - start,
@@ -167,11 +173,11 @@ public class ExecutionResultMessagePack implements Iterator<byte[]> {
                 "updates", stats.containsUpdates());
         row = LAST;
         if (stats.containsUpdates()) {
-            result.put("nodes_deleted", stats.getDeletedNodes());
-            result.put("nodes_created", stats.getNodesCreated());
-            result.put("rels_created", stats.getRelationshipsCreated());
-            result.put("rels_deleted", stats.getDeletedRelationships());
-            result.put("props_set", stats.getPropertiesSet());
+            putIfValue(result, "nodes_deleted", stats.getDeletedNodes());
+            putIfValue(result, "nodes_created", stats.getNodesCreated());
+            putIfValue(result, "rels_created", stats.getRelationshipsCreated());
+            putIfValue(result, "rels_deleted", stats.getDeletedRelationships());
+            putIfValue(result, "props_set", stats.getPropertiesSet());
         }
         if (exception!=null) {
             // TODO log
@@ -184,6 +190,12 @@ public class ExecutionResultMessagePack implements Iterator<byte[]> {
             exception = null;
         }
         return result;
+    }
+
+    private void putIfValue(Map<String, Object> result, String name, int value) {
+        if (value >0) {
+            result.put(name, value);
+        }
     }
 
     public void remove() {

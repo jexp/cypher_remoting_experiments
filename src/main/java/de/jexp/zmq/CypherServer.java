@@ -33,15 +33,18 @@ public class CypherServer {
             try {
                 final Object data = MsgPack.unpack(request, MsgPack.UNPACK_RAW_AS_STRING);
                 // System.out.println(data);
+                boolean stats=false;
                 ExecutionResult result = null;
                 if (data instanceof String) {
                     result = engine.execute((String) data, Collections.EMPTY_MAP);
                 }
                 if (data instanceof Map) {
-                    result = engine.execute((String) ((Map)data).get("query"),(Map)((Map)data).get("params"));
+                    final Map input = (Map) data;
+                    stats = Boolean.TRUE.equals(input.get("stats"));
+                    result = engine.execute((String) input.get("query"),(Map) input.get("params"));
                 }
                 if (result!=null) {
-                    final ExecutionResultMessagePack messagePack = new ExecutionResultMessagePack(result);
+                    final ExecutionResultMessagePack messagePack = new ExecutionResultMessagePack(result,stats);
                     while (messagePack.hasNext()) {
                         byte[] next = messagePack.next();
                         socket.send(next,messagePack.hasNext() ? ZMQ.SNDMORE : 0);

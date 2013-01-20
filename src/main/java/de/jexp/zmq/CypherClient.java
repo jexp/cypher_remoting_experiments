@@ -3,6 +3,8 @@ package de.jexp.zmq;
 import net.asdfa.msgpack.MsgPack;
 import org.zeromq.ZMQ;
 
+import static org.neo4j.helpers.collection.MapUtil.map;
+
 public class CypherClient {
 
     private static final int ROUNDS = 10000;
@@ -18,7 +20,7 @@ public class CypherClient {
         String query = args.length>0 ? args[0] : "start n=node(0) return 1";
         for (int round = 0; round < ROUNDS; round++) {
             // String query = "start n=node(0) match p=n-[r:KNOWS]->m return p,n,r,m,nodes(p) as nodes, rels(p) as rels,length(p) as length";
-            byte[] request = MsgPack.pack(query);
+            byte[] request = MsgPack.pack(map("query",query,"stats",false,"params",map("name","foo")));
             // System.out.println("Sending request " + round + "...");
             socket.send(request, 0);
 
