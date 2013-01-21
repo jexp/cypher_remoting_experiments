@@ -12,6 +12,7 @@ import org.neo4j.graphdb.Relationship;
 import org.neo4j.graphdb.Transaction;
 import org.neo4j.test.ImpermanentGraphDatabase;
 
+import java.util.Collections;
 import java.util.Map;
 
 /**
@@ -55,7 +56,7 @@ public class CypherResultMessagePackTest {
         ExecutionResult result = executionEngine.execute("start n=node(0) match p=n-[r:KNOWS]->m return p,n,r,m,nodes(p) as nodes, rels(p) as rels,length(p) as length");
         for (Map<String, Object> row : result) { }
         result = executionEngine.execute("start n=node(0) match p=n-[r:KNOWS]->m return p,n,r,m,nodes(p) as nodes, rels(p) as rels,length(p) as length");
-        final ExecutionResultMessagePack packedResult = new ExecutionResultMessagePack(result, false);
+        final ExecutionResultMessagePack packedResult = new ExecutionResultMessagePack(result);
         int count=0;
         int row=0;
         while (packedResult.hasNext()) {

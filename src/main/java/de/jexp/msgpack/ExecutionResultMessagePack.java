@@ -19,37 +19,53 @@ import static org.neo4j.helpers.collection.MapUtil.map;
 /**
  * @author mh
  * @since 20.01.13
+ * ideas for saving storage, performance:
+ * cache conversions (didn't help much)
+ * only return a node/rel first time it comes along later use {node-id:id} or {id:-id}
  */
 public class ExecutionResultMessagePack implements Iterator<byte[]> {
     private static final int FIRST = Integer.MIN_VALUE;
     private static final int LAST = Integer.MAX_VALUE;
+
     private final ExecutionResult result;
+    private final Map<String,Object> externalInfo;
     private final boolean stats;
-    int row = FIRST;
-    private Iterator<Map<String, Object>> it;
+
     private List<String> columns = null;
+    private Iterator<Map<String, Object>> it;
+
+    int row = FIRST;
     private final List<Object> data;
     private final long start;
     private Exception exception;
     private long bytes=0;
 
-    public ExecutionResultMessagePack(ExecutionResult result, boolean stats) {
+    public ExecutionResultMessagePack(ExecutionResult result, boolean stats, Map<String,Object> externalInfo) {
         this.result = result;
+        this.externalInfo = externalInfo !=null ? externalInfo : Collections.<String,Object>emptyMap();
         this.stats = stats;
         try {
-            columns = this.result.columns();
-            it = this.result.iterator();
+            if (result!=null) {
+                columns = this.result.columns();
+                it = this.result.iterator();
+            }
         } catch (Exception e) {
             this.exception = e;
-            if (columns==null) {
-                columns = Collections.emptyList();
-            }
-            if (it==null) {
-                it = emptyIterator();
-            }
+        }
+        if (columns==null) {
+            columns = Collections.emptyList();
+            row = 0;
+        }
+        if (it==null) {
+            it = emptyIterator();
+            row = row == FIRST || returnStats() ? row : LAST;
         }
         data = new ArrayList<Object>(columns);
         start = System.currentTimeMillis();
+    }
+
+    public ExecutionResultMessagePack(ExecutionResult result) {
+        this(result,false,Collections.<String,Object>emptyMap());
     }
 
     private Iterator<Map<String, Object>> emptyIterator() {
@@ -72,7 +88,11 @@ public class ExecutionResultMessagePack implements Iterator<byte[]> {
                     final Object value = current.get(columns.get(i));
                     data.set(i, convert(value));
                 }
-                row++;
+                if (it.hasNext() || returnStats()) {
+                    row++;
+                } else {
+                    row=LAST;
+                }
                 return pack(data);
             } catch(Exception e) {
                 exception = e;
@@ -161,31 +181,38 @@ public class ExecutionResultMessagePack implements Iterator<byte[]> {
     }
 
     private Map<String, Object> info() {
-        if (!stats && exception==null) {
+        if (!returnStats()) {
             row = LAST;
-            return Collections.EMPTY_MAP;
+            return Collections.emptyMap();
         }
-        final QueryStatistics stats = result.getQueryStatistics();
-        final Map<String, Object> result = MapUtil.map(
+        final Map<String, Object> info = MapUtil.map(
                 "time", System.currentTimeMillis() - start,
                 "rows", row,
-                "bytes", bytes,
-                "updates", stats.containsUpdates());
+                "bytes", bytes);
+        info.putAll(externalInfo);
         row = LAST;
-        if (stats.containsUpdates()) {
-            putIfValue(result, "nodes_deleted", stats.getDeletedNodes());
-            putIfValue(result, "nodes_created", stats.getNodesCreated());
-            putIfValue(result, "rels_created", stats.getRelationshipsCreated());
-            putIfValue(result, "rels_deleted", stats.getDeletedRelationships());
-            putIfValue(result, "props_set", stats.getPropertiesSet());
+        if (this.result != null) {
+            final QueryStatistics queryStats = this.result.getQueryStatistics();
+            if (queryStats != null && queryStats.containsUpdates()) {
+                info.put("updates", true);
+                putIfValue(info, "nodes_deleted", queryStats.getDeletedNodes());
+                putIfValue(info, "nodes_created", queryStats.getNodesCreated());
+                putIfValue(info, "rels_created", queryStats.getRelationshipsCreated());
+                putIfValue(info, "rels_deleted", queryStats.getDeletedRelationships());
+                putIfValue(info, "props_set", queryStats.getPropertiesSet());
+            }
         }
         if (exception!=null) {
             // TODO log
             exception.printStackTrace();
-            addException(result,exception);
+            addException(info,exception);
             exception = null;
         }
-        return result;
+        return info;
+    }
+
+    private boolean returnStats() {
+        return stats || exception != null;
     }
 
     public static void addException(Map<String, Object> result,Exception exception) {
