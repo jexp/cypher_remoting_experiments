@@ -43,7 +43,13 @@ public class CypherServer {
         ZMQ.Context context = ZMQ.context(1);
         ZMQ.Socket socket = context.socket(ZMQ.REP);
         socket.bind ("tcp://*:5555");
-
+        // socket.setReceiveTimeOut(ms);
+        // socket.setSendTimeOut(ms);
+        // socket.setLinger(ms);
+        // high-water-mark, socket.setHWM(), socket.setSwap
+        socket.setTCPKeepAlive(1);
+        // subscribe (byte [] topic), e.g. to differentiate between read and write queries or cypher and non-cypher
+        // TODO poller
         while (true) {
             byte[] request = socket.recv(0);
             try {

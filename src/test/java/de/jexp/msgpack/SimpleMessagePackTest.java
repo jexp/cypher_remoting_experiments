@@ -61,9 +61,12 @@ public class SimpleMessagePackTest {
 
     @Test
     public void testPackToStream() throws Exception {
+        for (int i=0;i<10000;i++) {
+            MsgPack.pack(objects);
+        }
         long time = System.currentTimeMillis();
         long counter=0;
-        for (int i=0;i<1000000;i++) {
+        for (int i=0;i<1;i++) {
             counter+=MsgPack.pack(objects).length;
         }
         System.out.println("took "+(System.currentTimeMillis()-time)+" ms for "+counter+" bytes.");

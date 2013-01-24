@@ -11,6 +11,7 @@ import org.neo4j.kernel.GraphDatabaseAPI;
 import javax.transaction.*;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class TransactionRegistry {
@@ -22,7 +23,7 @@ public class TransactionRegistry {
 
     private long currentTxId = -1l;
 
-    private Map<Long, Transaction> txIdToTxMap = new HashMap<Long, Transaction>();
+    private Map<Long, Transaction> txIdToTxMap = new ConcurrentHashMap<Long, Transaction>();
 
     public TransactionRegistry(GraphDatabaseService neo4j) {
         this.db = neo4j;

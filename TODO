@@ -1,0 +1,6 @@
+Extract Serializer and Transport into interface
+
+Convert Transport Interaction into Iteration
+Invert Iterators to callbacks?
+
+Test Websockets, Stream, Thrift, Protocol Buffers.
