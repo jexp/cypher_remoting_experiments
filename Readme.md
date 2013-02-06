@@ -8,6 +8,17 @@
     ./client.sh
     ruby client.rb
 
+### Sample Session
+
+    Request
+    {"query","start n=({ids}) return n", "params": {"ids" : [1,2]},"stats": true,"result":true}
+
+    Response:
+    [n]
+    [{"id":1,"data":{"name":"foo"}}]
+    [{"id":2,"data":{"name":"bar"}}]
+    {"time": 0, "rows": 2, "bytes": 100}
+
 ## Ideas:
 
 Write a Cypher only endpoint for Neo4j that uses a fast transport and serialization across multiple client languages.
@@ -68,6 +79,10 @@ Header with Columns, optional Footer with time, bytes, tx-id, error, exception, 
    mvn clean install
    mvn install:install-file -DgroupId=org.zeromq -DartifactId=zmq -Dversion=2.1.0 -Dfile=src/zmq.jar  -Dpackaging=jar -DgeneratePom=true
 
+#### Running as Neo4j Kernel Extension
+
+   The cypher server is now packaged as a Neo4j Kernel Extension. So if you build the jar with mvn package and drop the jar in your neo4j environment
+   either in /server/plugins or your classpath/build repository for embedded development, the extension will be started and listen on port 5555 by default.
 
 #### Ruby
 

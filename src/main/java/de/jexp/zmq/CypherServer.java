@@ -7,19 +7,23 @@ import org.neo4j.cypher.javacompat.ExecutionEngine;
 import org.neo4j.cypher.javacompat.ExecutionResult;
 import org.neo4j.graphdb.*;
 import org.neo4j.kernel.EmbeddedGraphDatabase;
+import org.neo4j.kernel.impl.util.StringLogger;
+import org.neo4j.kernel.lifecycle.Lifecycle;
 import org.zeromq.ZMQ;
 
 import java.io.File;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.neo4j.helpers.collection.MapUtil.map;
 /*
 MAVEN_OPTS="-Djava.library.path=/usr/local/lib -Xmx256M -Xms256M -server -d64" mvn exec:java -Dexec.mainClass=de.jexp.zmq.CypherServer -Dexec.args=graph.db
  */
 
-public class CypherServer {
+public class CypherServer implements Lifecycle, Runnable {
+    public static final String SERVICE_NAME = "CYPHER_REMOTING";
 
     public final static String TX_ID = "tx_id";
     public final static String TX = "tx";
@@ -28,69 +32,38 @@ public class CypherServer {
     public final static String STATS = "stats";
     public final static String NO_RESULTS = "no_results";
     private static final byte[] EMPTY_MSG = MsgPack.pack(Collections.EMPTY_MAP);
+    private static final int PORT = 5555;
+    private final GraphDatabaseService db;
+    private final StringLogger logger;
+    private final ExecutionEngine engine;
+    private final TransactionRegistry transactionRegistry;
+    private ZMQ.Context context;
+    private ZMQ.Socket socket;
+    private AtomicBoolean running=new AtomicBoolean(false);
 
-    public static void main(String[] args) {
+    public CypherServer(GraphDatabaseService db, StringLogger logger) {
+        this.db = db;
+        this.logger = logger;
+        engine = new ExecutionEngine(db);
+        transactionRegistry = new TransactionRegistry(db);
+    }
 
+
+
+    public static void main(final String[] args) throws Throwable {
         final File directory = new File(args[0]);
         boolean newDB=!directory.exists();
         System.out.println("Using database "+directory+" new "+newDB);
-        final EmbeddedGraphDatabase db = new EmbeddedGraphDatabase(args[0]);
-        final ExecutionEngine engine = new ExecutionEngine(db);
-        final TransactionRegistry transactionRegistry = new TransactionRegistry(db);
+        final GraphDatabaseService db = new EmbeddedGraphDatabase(args[0]);
         if (newDB) initialize(db);
-        Runtime.getRuntime().addShutdownHook(new Thread(){ @Override public void run() { db.shutdown(); } });
 
-        ZMQ.Context context = ZMQ.context(1);
-        ZMQ.Socket socket = context.socket(ZMQ.REP);
-        socket.bind ("tcp://*:5555");
-        // socket.setReceiveTimeOut(ms);
-        // socket.setSendTimeOut(ms);
-        // socket.setLinger(ms);
-        // high-water-mark, socket.setHWM(), socket.setSwap
-        socket.setTCPKeepAlive(1);
-        // subscribe (byte [] topic), e.g. to differentiate between read and write queries or cypher and non-cypher
-        // TODO poller
-        while (true) {
-            byte[] request = socket.recv(0);
-            try {
-                final Object data = MsgPack.unpack(request, MsgPack.UNPACK_RAW_AS_STRING);
-                // System.out.println(data);
-                boolean stats=false;
-                ExecutionResult result = null;
-                if (data instanceof String) {
-                    result = engine.execute((String) data, Collections.<String,Object>emptyMap());
-                }
-                Map<String,Object> info = new HashMap<String,Object>();
-                if (data instanceof Map) {
-                    final Map input = (Map) data;
-                    stats = Boolean.TRUE.equals(input.get(STATS));
-                    final Number txId = (Number) input.get(TX_ID);
-                    final String tx = (String) input.get(TX);
-                    info.putAll(beforeQuery(transactionRegistry, tx, txId));
-
-                    Map<String,Object> params = input.containsKey(PARAMS) ? (Map<String,Object>) input.get(PARAMS) : Collections.<String,Object>emptyMap();
-                    final String query = (String) input.get(QUERY);
-                    if (query != null) result = engine.execute(query,params);
-                    if (input.containsKey(NO_RESULTS)) result=null;
-                    info.putAll(afterQuery(transactionRegistry, tx));
-                }
-                final ExecutionResultMessagePack messagePack = new ExecutionResultMessagePack(result,stats,info);
-                if (!messagePack.hasNext()) {
-                    socket.send(EMPTY_MSG,0);
-                } else {
-                    while (messagePack.hasNext()) {
-                        byte[] next = messagePack.next();
-                        socket.send(next,messagePack.hasNext() ? ZMQ.SNDMORE : 0);
-                    }
-                }
-
-            } catch (Exception e) {
-                e.printStackTrace();
-                final Map<String, Object> result = map();
-                ExecutionResultMessagePack.addException(result,e);
-                socket.send(MsgPack.pack(result),0);
+        Runtime.getRuntime().addShutdownHook(new Thread() {
+            @Override
+            public void run() {
+                db.shutdown();
             }
-        }
+        });
+        Thread.currentThread().join();
     }
 
     private static Map<String,Object> beforeQuery(TransactionRegistry transactionRegistry, String tx, Number txId) throws Exception {
@@ -134,5 +107,102 @@ public class CypherServer {
         }
         tx.success();
         tx.finish();
+    }
+
+
+    @Override
+    public void init() throws Throwable {
+
+    }
+
+    @Override
+    public void start() throws Throwable {
+        context = ZMQ.context(1);
+        socket = context.socket(ZMQ.REP);
+        // socket.setReceiveTimeOut(ms);
+        // socket.setSendTimeOut(ms);
+        // socket.setLinger(ms);
+        // high-water-mark, socket.setHWM(), socket.setSwap
+        socket.setTCPKeepAlive(1);
+        // subscribe (byte [] topic), e.g. to differentiate between read and write queries or cypher and non-cypher
+
+        socket.bind("tcp://*:" + PORT);
+        running.set(true);
+        final Thread runner = new Thread(this);
+        runner.start();
+        logger.info("Started Cypher Remoting on port "+PORT);
+    }
+
+    @Override
+    public void stop() throws Throwable {
+        running.set(false);
+        socket.close();
+        context.term();
+    }
+
+    @Override
+    public void shutdown() throws Throwable {
+        running.set(false);
+        socket.close();
+        context.term();
+    }
+
+    @Override
+    public void run() {
+        while (running.get()) {
+            byte[] request = socket.recv(0);
+            try {
+                final Object data = MsgPack.unpack(request, MsgPack.UNPACK_RAW_AS_STRING);
+                if (logger.isDebugEnabled()) {
+                    logger.debug("Cypher Remoting, got query "+data);
+                }
+                boolean stats=false;
+                ExecutionResult result = null;
+                Map<String,Object> info = new HashMap<String,Object>();
+                if (data instanceof String) {
+                    result = execute(Collections.singletonMap(QUERY, (String) data), info);
+                }
+                if (data instanceof Map) {
+                    result=execute((Map) data,info);
+                }
+                final ExecutionResultMessagePack messagePack = new ExecutionResultMessagePack(result,stats,info);
+                if (!messagePack.hasNext()) {
+                    socket.send(EMPTY_MSG, 0);
+                } else {
+                    while (messagePack.hasNext()) {
+                        byte[] next = messagePack.next();
+                        socket.send(next, messagePack.hasNext() ? ZMQ.SNDMORE : 0);
+                    }
+                }
+                if (logger.isDebugEnabled()) {
+                    logger.debug("Cypher Remoting, result stats "+messagePack.createResultInfo());
+                }
+
+            } catch (Exception e) {
+                logger.warn("Error during remote cypher execution ",e);
+                final Map<String, Object> result = map();
+                ExecutionResultMessagePack.addException(result, e);
+                socket.send(MsgPack.pack(result), 0);
+            }
+        }
+    }
+
+    private ExecutionResult execute(Map input, Map<String, Object> info) throws Exception {
+        boolean stats = Boolean.TRUE.equals(input.get(STATS));
+        final Number txId = (Number) input.get(TX_ID);
+        final String tx = (String) input.get(TX);
+
+        Map<String,Object> params = input.containsKey(PARAMS) ? (Map<String,Object>) input.get(PARAMS) : Collections.<String,Object>emptyMap();
+        final String query = (String) input.get(QUERY);
+
+        info.putAll(beforeQuery(transactionRegistry, tx, txId));
+
+        ExecutionResult result = null;
+        if (query != null) result = engine.execute(query,params);
+
+        if (input.containsKey(NO_RESULTS)) result=null;
+
+        info.putAll(afterQuery(transactionRegistry, tx));
+        return result;
     }
 }

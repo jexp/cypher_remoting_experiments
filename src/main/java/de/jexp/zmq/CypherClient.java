@@ -4,9 +4,7 @@ import net.asdfa.msgpack.MsgPack;
 import org.zeromq.ZMQ;
 
 import java.util.*;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
 import static de.jexp.zmq.CypherServer.*;
 import static org.neo4j.helpers.collection.MapUtil.map;
@@ -18,9 +16,10 @@ MAVEN_OPTS="-Djava.library.path=/usr/local/lib" mvn exec:java -Dexec.mainClass=d
 public class CypherClient {
 
     private static final String ADDRESS = "tcp://localhost:5555";
+    private static final int THREADS = 1;
     private final ThreadLocal<ZMQ.Socket> sockets = new ThreadLocal<ZMQ.Socket>() {
         protected ZMQ.Socket initialValue() {
-            ZMQ.Socket socket = context.socket(ZMQ.REQ); // todo socket threadlocal
+            ZMQ.Socket socket = context.socket(ZMQ.REQ);
             System.out.println("Connecting to cypher server...");
             socket.connect(ADDRESS);
             return socket;
@@ -36,7 +35,7 @@ public class CypherClient {
     private ZMQ.Socket socket() {
         return sockets.get();
     }
-    public List<Object> query(String query, Map params, Map opts, final List<Object> res) {
+    public int query(String query, Map params, Map opts, final List<Object> res) {
         final Map<String,Object> requestData = map(QUERY, query, STATS, false, PARAMS, params);
         requestData.putAll(opts);
         byte[] request = MsgPack.pack(requestData);
@@ -63,7 +62,7 @@ public class CypherClient {
             System.err.println("Error unpacking ");
             e.printStackTrace();
         }
-        return res;
+        return bytes;
     }
     
     void close() {
@@ -71,33 +70,39 @@ public class CypherClient {
         socket().disconnect(ADDRESS);
         //context.term();
     }
-    private static final int ROUNDS = 1000;
+    private static final int ROUNDS = 1;
 
     public static void main(String[] args) throws Exception {
         final CypherClient client = new CypherClient();
         long time=System.currentTimeMillis();
-        long bytes=0;
         String query = args.length>0 ? args[0] : "create n={name:{name}}";
         // query = "start n=node(0) match p=n-[r:KNOWS]->m return p,n,r,m,nodes(p) as nodes, rels(p) as rels,length(p) as length";
         // for (int i=0;i<10;i++) testCreate(client);
-        testMulti(client);
+        final int bytes = testMulti(client, ROUNDS, THREADS);
         System.out.println(ROUNDS*10+" queries took "+(System.currentTimeMillis()-time)+" ms for "+bytes+" bytes.");
         client.close();
     }
 
-    private static void testMulti(final CypherClient client) throws InterruptedException {
-        final ExecutorService pool = Executors.newFixedThreadPool(10);
+    private static int testMulti(final CypherClient client, final int rounds, final int threads) throws Exception {
+        final ExecutorService pool = Executors.newFixedThreadPool(threads);
         final String query = "create n={name:{name}}";
-        for (int round = 0; round < ROUNDS*10; round++) {
+        Collection<Future<Integer>> futures=new ArrayList<Future<Integer>>(rounds);
+        for (int round = 0; round < rounds *10; round++) {
             final int finalRound = round;
-            pool.submit(new Runnable() {
-                public void run() {
-                    client.query(query, Collections.singletonMap("name", "test" + finalRound),map(NO_RESULTS,true),null);
+            final Callable<Integer> task = new Callable<Integer>() {
+                public Integer call() {
+                    return client.query(query, Collections.singletonMap("name", "test" + finalRound), map(NO_RESULTS, true), null);
                 }
-            });
+            };
+            futures.add(pool.submit(task));
+        }
+        int result=0;
+        for (Future<Integer> future : futures) {
+            result+=future.get(50,TimeUnit.SECONDS);
         }
         pool.shutdown();
-        pool.awaitTermination(20, TimeUnit.SECONDS);
+        pool.awaitTermination(60, TimeUnit.SECONDS);
+        return result;
     }
     private static void testCreate(CypherClient client) {
         String query = "create n={name:{name}}";
@@ -106,7 +111,7 @@ public class CypherClient {
         client.query(null, null, map(TX, "begin",STATS,true), res);
         Number txId = (Number) ((Map)res.get(res.size()-1)).get("tx_id");
         for (int round = 0; round < ROUNDS; round++) {
-            client.query(query, Collections.singletonMap("name", "test" + round),map(TX_ID,txId, NO_RESULTS,true),null);
+            client.query(query, Collections.singletonMap("name", "test" + round),map(TX_ID,txId, NO_RESULTS,false),null);
         }
         client.query(null, null, map(TX, "commit",TX_ID,txId), null);
     }

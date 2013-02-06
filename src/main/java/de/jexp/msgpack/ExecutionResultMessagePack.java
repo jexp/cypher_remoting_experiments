@@ -181,16 +181,19 @@ public class ExecutionResultMessagePack implements Iterator<byte[]> {
     }
 
     private Map<String, Object> info() {
+        row = LAST;
         if (!returnStats()) {
-            row = LAST;
             return Collections.emptyMap();
         }
+        return createResultInfo();
+    }
+
+    public Map<String, Object> createResultInfo() {
         final Map<String, Object> info = MapUtil.map(
                 "time", System.currentTimeMillis() - start,
                 "rows", row,
                 "bytes", bytes);
         info.putAll(externalInfo);
-        row = LAST;
         if (this.result != null) {
             final QueryStatistics queryStats = this.result.getQueryStatistics();
             if (queryStats != null && queryStats.containsUpdates()) {
