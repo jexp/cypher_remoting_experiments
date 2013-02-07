@@ -77,14 +77,15 @@ Header with Columns, optional Footer with time, bytes, tx-id, error, exception, 
 #### Java
 
 ````
+    # need a recent update from the repo to make parallel server work (Jan 31 2013)
     git clone https://github.com/zeromq/jzmq
     cd jzmq
  
     ./autogen.sh
     ./configure
     make
+    make install
     mvn clean install
-    mvn install:install-file -DgroupId=org.zeromq -DartifactId=zmq -Dversion=2.1.0 -Dfile=src/zmq.jar  -Dpackaging=jar -DgeneratePom=true
 ````
 
 #### Running as Neo4j Kernel Extension
