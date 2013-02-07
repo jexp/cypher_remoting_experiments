@@ -4,12 +4,15 @@
 
 * right now queries are hard coded in clients
 
+````
     ./server.sh [db-dir]
     ./client.sh
     ruby client.rb
+````
 
 ### Sample Session
 
+````
     Request
     {"query","start n=({ids}) return n", "params": {"ids" : [1,2]},"stats": true,"result":true}
 
@@ -18,6 +21,7 @@
     [{"id":1,"data":{"name":"foo"}}]
     [{"id":2,"data":{"name":"bar"}}]
     {"time": 0, "rows": 2, "bytes": 100}
+````
 
 ## Ideas:
 
@@ -55,10 +59,12 @@ Header with Columns, optional Footer with time, bytes, tx-id, error, exception, 
 
 * messagepack-lite (source, build, install in repo)
 
+````
     hg clone https://bitbucket.org/sirbrialliance/msgpack-java-lite
     cd msgpack-java-lite
     ant
     mvn install:install-file -DgroupId=net.asdfa -DartifactId=msgpack -Dversion=0.0.1 -Dfile=dist/msgpack-java-lite.jar  -Dpackaging=jar -DgeneratePom=true
+````
 
 ## Transport
 
@@ -70,14 +76,16 @@ Header with Columns, optional Footer with time, bytes, tx-id, error, exception, 
 
 #### Java
 
-   git clone https://github.com/zeromq/jzmq
-   cd jzmq
-
-   ./autogen.sh
-   ./configure
-   make
-   mvn clean install
-   mvn install:install-file -DgroupId=org.zeromq -DartifactId=zmq -Dversion=2.1.0 -Dfile=src/zmq.jar  -Dpackaging=jar -DgeneratePom=true
+````
+    git clone https://github.com/zeromq/jzmq
+    cd jzmq
+ 
+    ./autogen.sh
+    ./configure
+    make
+    mvn clean install
+    mvn install:install-file -DgroupId=org.zeromq -DartifactId=zmq -Dversion=2.1.0 -Dfile=src/zmq.jar  -Dpackaging=jar -DgeneratePom=true
+````
 
 #### Running as Neo4j Kernel Extension
 
