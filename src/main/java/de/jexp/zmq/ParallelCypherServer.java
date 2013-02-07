@@ -6,6 +6,7 @@ import net.asdfa.msgpack.MsgPack;
 import org.neo4j.cypher.javacompat.ExecutionEngine;
 import org.neo4j.cypher.javacompat.ExecutionResult;
 import org.neo4j.graphdb.*;
+import org.neo4j.helpers.collection.MapUtil;
 import org.neo4j.kernel.EmbeddedGraphDatabase;
 import org.zeromq.ZMQ;
 import org.zeromq.ZMQException;
@@ -34,12 +35,12 @@ public class ParallelCypherServer {
     private static final int NUM_THREADS = 5;
     private static final String INPROC_WORKERS = "inproc://workers";
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws InterruptedException {
 
         final File directory = new File(args[0]);
         boolean newDB=!directory.exists();
         System.out.println("Using database "+directory+" new "+newDB);
-        final EmbeddedGraphDatabase db = new EmbeddedGraphDatabase(args[0]);
+        final EmbeddedGraphDatabase db = new EmbeddedGraphDatabase(args[0], MapUtil.stringMap("keep_logical_logs","false"));
         final ExecutionEngine engine = new ExecutionEngine(db);
         final TransactionRegistry transactionRegistry = new TransactionRegistry(db);
         if (newDB) initialize(db);
@@ -62,8 +63,6 @@ public class ParallelCypherServer {
             }
         });
 
-        final AtomicInteger requestCount=new AtomicInteger();
-
         for (int i=0;i<NUM_THREADS;i++) {
             final int threadId = i;
             final Thread worker = new Thread() {
@@ -79,10 +78,7 @@ public class ParallelCypherServer {
                     socket.connect(INPROC_WORKERS);
                     System.out.println(threadId+". Connected to worker socket "+socket);
                     while (!Thread.currentThread().isInterrupted()) {
-                            byte[] request = socket.recv(0);
-                        System.out.print(threadId);
-                        System.out.flush();
-                        if (requestCount.incrementAndGet() % 80 == 0) System.out.println();
+                        byte[] request = socket.recv(0);
                         try {
                             final Object data = MsgPack.unpack(request, MsgPack.UNPACK_RAW_AS_STRING);
                             boolean stats = false;
@@ -124,12 +120,18 @@ public class ParallelCypherServer {
                     System.out.println(threadId+". End of run loop "+socket);
                 }
             };
+            worker.setDaemon(true);
             worker.start();
         }
 
-        ZMQQueue queue = new ZMQQueue(context,clients,workers);
-        final Thread queueThread = new Thread(queue);
+        final Thread queueThread = new Thread() {
+            public void run() {
+                ZMQ.proxy(clients,workers,null);
+            }
+        };
+        queueThread.setDaemon(true);
         queueThread.start();
+        Thread.currentThread().join();
     }
 
 

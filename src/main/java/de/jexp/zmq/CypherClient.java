@@ -16,7 +16,9 @@ MAVEN_OPTS="-Djava.library.path=/usr/local/lib" mvn exec:java -Dexec.mainClass=d
 public class CypherClient {
 
     private static final String ADDRESS = "tcp://localhost:5555";
-    private static final int THREADS = 1;
+    private static final int THREADS = 5;
+    private static final int ROUNDS = 5000;
+    public static final int BATCH = 1000;
     private final ThreadLocal<ZMQ.Socket> sockets = new ThreadLocal<ZMQ.Socket>() {
         protected ZMQ.Socket initialValue() {
             ZMQ.Socket socket = context.socket(ZMQ.REQ);
@@ -70,30 +72,22 @@ public class CypherClient {
         socket().disconnect(ADDRESS);
         //context.term();
     }
-    private static final int ROUNDS = 1;
-
     public static void main(String[] args) throws Exception {
         final CypherClient client = new CypherClient();
         long time=System.currentTimeMillis();
         String query = args.length>0 ? args[0] : "create n={name:{name}}";
         // query = "start n=node(0) match p=n-[r:KNOWS]->m return p,n,r,m,nodes(p) as nodes, rels(p) as rels,length(p) as length";
-        // for (int i=0;i<10;i++) testCreate(client);
-        final int bytes = testMulti(client, ROUNDS, THREADS);
-        System.out.println(ROUNDS*10+" queries took "+(System.currentTimeMillis()-time)+" ms for "+bytes+" bytes.");
+        int bytes=0;
+        bytes = testMulti(ROUNDS*BATCH, THREADS, new SingleCallable(client));
+        //bytes = testMulti(ROUNDS, THREADS, new TransactionCallable(client, BATCH));
+        System.out.println(ROUNDS*BATCH+" queries took "+(System.currentTimeMillis()-time)+" ms for "+bytes+" bytes.");
         client.close();
     }
 
-    private static int testMulti(final CypherClient client, final int rounds, final int threads) throws Exception {
+    private static int testMulti(final int rounds, final int threads, Callable<Integer> task) throws Exception {
         final ExecutorService pool = Executors.newFixedThreadPool(threads);
-        final String query = "create n={name:{name}}";
         Collection<Future<Integer>> futures=new ArrayList<Future<Integer>>(rounds);
-        for (int round = 0; round < rounds *10; round++) {
-            final int finalRound = round;
-            final Callable<Integer> task = new Callable<Integer>() {
-                public Integer call() {
-                    return client.query(query, Collections.singletonMap("name", "test" + finalRound), map(NO_RESULTS, true), null);
-                }
-            };
+        for (int round = 0; round < rounds; round++) {
             futures.add(pool.submit(task));
         }
         int result=0;
@@ -104,15 +98,39 @@ public class CypherClient {
         pool.awaitTermination(60, TimeUnit.SECONDS);
         return result;
     }
-    private static void testCreate(CypherClient client) {
-        String query = "create n={name:{name}}";
-        // System.out.println("query "+query);
-        final ArrayList<Object> res = new ArrayList<Object>();
-        client.query(null, null, map(TX, "begin",STATS,true), res);
-        Number txId = (Number) ((Map)res.get(res.size()-1)).get("tx_id");
-        for (int round = 0; round < ROUNDS; round++) {
-            client.query(query, Collections.singletonMap("name", "test" + round),map(TX_ID,txId, NO_RESULTS,false),null);
+
+    private static class SingleCallable implements Callable<Integer> {
+        final String query = "create n={name:{name}}";
+        private final CypherClient client;
+
+        public SingleCallable(CypherClient client) {
+            this.client = client;
         }
-        client.query(null, null, map(TX, "commit",TX_ID,txId), null);
+
+        public Integer call() {
+            return client.query(query, Collections.singletonMap("name", "test"), map(NO_RESULTS, true), null);
+        }
+    }
+    private static class TransactionCallable implements Callable<Integer> {
+        final String query = "create n={name:{name}}";
+        private final CypherClient client;
+        private final int batch;
+
+        public TransactionCallable(CypherClient client, int batch) {
+            this.client = client;
+            this.batch = batch;
+        }
+
+        public Integer call() {
+            final ArrayList<Object> res = new ArrayList<Object>();
+            int bytes = 0;
+            client.query(null, null, map(TX, "begin", STATS, true), res);
+            Number txId = (Number) ((Map) res.get(res.size() - 1)).get("tx_id");
+            for (int round = 0; round < batch; round++) {
+                bytes += client.query(query, Collections.singletonMap("name", "test" + round), map(TX_ID, txId, NO_RESULTS, false), null);
+            }
+            bytes += client.query(null, null, map(TX, "commit", TX_ID, txId), null);
+            return bytes;
+        }
     }
 }
