@@ -91,6 +91,14 @@ Header with Columns, optional Footer with time, bytes, tx-id, error, exception, 
 
    The cypher server is now packaged as a Neo4j Kernel Extension. So if you build the jar with mvn package and drop the jar in your neo4j environment
    either in /server/plugins or your classpath/build repository for embedded development, the extension will be started and listen on port 5555 by default.
+   
+   The server starts by default with 1 Thread, the multiple threads don't work yet with transactions (wrong transactions resumed in the wrong thread) but for 
+   non-transactional access the single server works fine. Threads and port can be configured in `neo4j.properties` or in the config-map passed to the database.
+
+````
+   cypher_remoting_address=:5555 # a hostname and port 
+   cypher_remoting_threads=1 # number of threads 1 to 10
+````
 
 #### Ruby
 

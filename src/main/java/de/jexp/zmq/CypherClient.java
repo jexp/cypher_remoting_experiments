@@ -17,7 +17,7 @@ public class CypherClient {
 
     private static final String ADDRESS = "tcp://localhost:5555";
     private static final int THREADS = 5;
-    private static final int ROUNDS = 5000;
+    private static final int ROUNDS = 50;
     public static final int BATCH = 1000;
     private final ThreadLocal<ZMQ.Socket> sockets = new ThreadLocal<ZMQ.Socket>() {
         protected ZMQ.Socket initialValue() {
