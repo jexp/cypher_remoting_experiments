@@ -6,11 +6,8 @@ import org.junit.Before;
 import org.junit.Test;
 import org.neo4j.cypher.javacompat.ExecutionEngine;
 import org.neo4j.cypher.javacompat.ExecutionResult;
-import org.neo4j.graphdb.DynamicRelationshipType;
-import org.neo4j.graphdb.Node;
-import org.neo4j.graphdb.Relationship;
-import org.neo4j.graphdb.Transaction;
-import org.neo4j.test.ImpermanentGraphDatabase;
+import org.neo4j.graphdb.*;
+import org.neo4j.test.TestGraphDatabaseFactory;
 
 import java.util.Collections;
 import java.util.Map;
@@ -21,15 +18,14 @@ import java.util.Map;
  */
 public class CypherResultMessagePackTest {
 
-    private final ImpermanentGraphDatabase db = new ImpermanentGraphDatabase();
+    private final GraphDatabaseService db = new TestGraphDatabaseFactory().newImpermanentDatabase();
     private final ExecutionEngine executionEngine = new ExecutionEngine(db);
     private Transaction tx;
 
     @Before
     public void setUp() throws Exception {
-        db.cleanContent(true);
         tx = db.beginTx();
-        final Node refNode = db.getReferenceNode();
+        final Node refNode = db.createNode();
         refNode.setProperty("name", "Name");
         refNode.setProperty("age", 42);
         refNode.setProperty("married", true);
@@ -47,7 +43,6 @@ public class CypherResultMessagePackTest {
     public void tearDown() throws Exception {
         if (tx!=null) {
             tx.failure();
-            tx.finish();
         }
     }
 

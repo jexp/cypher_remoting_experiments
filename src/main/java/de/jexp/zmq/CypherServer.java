@@ -7,9 +7,9 @@ import org.neo4j.cypher.javacompat.ExecutionEngine;
 import org.neo4j.cypher.javacompat.ExecutionResult;
 import org.neo4j.graphdb.*;
 import org.neo4j.helpers.HostnamePort;
-import org.neo4j.kernel.EmbeddedGraphDatabase;
 import org.neo4j.kernel.impl.util.StringLogger;
 import org.neo4j.kernel.lifecycle.Lifecycle;
+import org.neo4j.graphdb.factory.GraphDatabaseFactory;
 import org.zeromq.ZMQ;
 
 import java.io.File;
@@ -62,7 +62,7 @@ public class CypherServer implements Lifecycle {
         final File directory = new File(args[0]);
         boolean newDB=!directory.exists();
         System.out.println("Using database "+directory+" new "+newDB);
-        final GraphDatabaseService db = new EmbeddedGraphDatabase(args[0]);
+        final GraphDatabaseService db = new GraphDatabaseFactory().newEmbeddedDatabase( args[0] );
         if (newDB) initialize(db);
 
         Runtime.getRuntime().addShutdownHook(new Thread() {
@@ -101,7 +101,7 @@ public class CypherServer implements Lifecycle {
 
     private static void initialize(GraphDatabaseService db) {
         Transaction tx = db.beginTx();
-        final Node refNode = db.getReferenceNode();
+        final Node refNode = db.createNode();
         refNode.setProperty("name", "Name");
         refNode.setProperty("age", 42);
         refNode.setProperty("married", true);
@@ -114,7 +114,6 @@ public class CypherServer implements Lifecycle {
             rel.setProperty("weight",42D);
         }
         tx.success();
-        tx.finish();
     }
 
 
