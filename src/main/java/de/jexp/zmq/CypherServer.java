@@ -138,7 +138,12 @@ public class CypherServer implements Lifecycle {
             for (int thread=0;thread< numThreads;thread++){
                 executors.add(new CypherExecutor(WORKER_ADDRESS,true));
             }
-            startDaemonThread(new Runnable() { public void run() { ZMQ.proxy(router, workers,null); } });
+
+            startDaemonThread(new Runnable() {
+                public void run() {
+                    ZMQ.proxy(router, workers, null);
+                }
+            });
         } else {
             executors.add(new CypherExecutor(externalAddress,false));
         }
