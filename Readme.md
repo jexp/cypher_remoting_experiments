@@ -74,19 +74,6 @@ Header with Columns, optional Footer with time, bytes, tx-id, error, exception, 
 
     brew install zeromq
 
-#### Java
-
-````
-    # need a recent update from the repo to make parallel server work (Jan 31 2013)
-    git clone https://github.com/zeromq/jzmq
-    cd jzmq
- 
-    ./autogen.sh
-    ./configure
-    make
-    make install
-    mvn clean install
-````
 
 #### Running as Neo4j Kernel Extension
 

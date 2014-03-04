@@ -18,9 +18,6 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.neo4j.helpers.collection.MapUtil.map;
-/*
-MAVEN_OPTS="-Djava.library.path=/usr/local/lib -Xmx256M -Xms256M -server -d64" mvn exec:java -Dexec.mainClass=de.jexp.zmq.CypherServer -Dexec.args=graph.db
- */
 
 public class CypherServer implements Lifecycle {
     public static final String SERVICE_NAME = "CYPHER_REMOTING";
