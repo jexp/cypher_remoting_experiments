@@ -11,15 +11,13 @@ import org.neo4j.kernel.impl.util.StringLogger;
 import org.neo4j.kernel.lifecycle.Lifecycle;
 import org.neo4j.graphdb.factory.GraphDatabaseFactory;
 import org.zeromq.ZMQ;
-
+import org.zeromq.ZContext;
+import org.zeromq.ZMQException;
 import java.io.File;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.neo4j.helpers.collection.MapUtil.map;
-/*
-MAVEN_OPTS="-Djava.library.path=/usr/local/lib -Xmx256M -Xms256M -server -d64" mvn exec:java -Dexec.mainClass=de.jexp.zmq.CypherServer -Dexec.args=graph.db
- */
 
 public class CypherServer implements Lifecycle {
     public static final String SERVICE_NAME = "CYPHER_REMOTING";
@@ -40,7 +38,7 @@ public class CypherServer implements Lifecycle {
     private final ExecutionEngine engine;
     private final TransactionRegistry transactionRegistry;
     
-    private ZMQ.Context context;
+    private ZContext context = new ZContext();;
 
     private AtomicBoolean running=new AtomicBoolean(false);
     private final List<CypherExecutor> executors;
@@ -64,6 +62,7 @@ public class CypherServer implements Lifecycle {
         System.out.println("Using database "+directory+" new "+newDB);
         final GraphDatabaseService db = new GraphDatabaseFactory().newEmbeddedDatabase( args[0] );
         if (newDB) initialize(db);
+        final Thread mainThread = Thread.currentThread();
 
         Runtime.getRuntime().addShutdownHook(new Thread() {
             @Override
@@ -71,7 +70,7 @@ public class CypherServer implements Lifecycle {
                 db.shutdown();
             }
         });
-        Thread.currentThread().join();
+        mainThread.join();
     }
 
     private static Map<String,Object> beforeQuery(TransactionRegistry transactionRegistry, String tx, Number txId) throws Exception {
@@ -124,15 +123,15 @@ public class CypherServer implements Lifecycle {
 
     @Override
     public void start() throws Throwable {
-        context = ZMQ.context(1);
+        
         running.set(true);
 
         if (numThreads >1) {
             
-            final ZMQ.Socket router = context.socket(ZMQ.ROUTER);
+            final ZMQ.Socket router = context.createSocket((ZMQ.ROUTER));
             router.bind(externalAddress);
 
-            final ZMQ.Socket workers = context.socket(ZMQ.DEALER);
+            final ZMQ.Socket workers = context.createSocket(ZMQ.DEALER);
             workers.bind(WORKER_ADDRESS);
 
             for (int thread=0;thread< numThreads;thread++){
@@ -173,7 +172,7 @@ public class CypherServer implements Lifecycle {
         for (CypherExecutor executor : executors) {
             executor.stop();
         }
-        context.term();
+        context.destroy();
     }
 
     @Override
@@ -185,7 +184,7 @@ public class CypherServer implements Lifecycle {
         private ZMQ.Socket socket;
 
         CypherExecutor(String address, boolean connect) {
-            socket = context.socket(ZMQ.REP);
+            socket = context.createSocket(ZMQ.REP);
             socket.setTCPKeepAlive(1);
             if (connect) socket.connect(address); 
             else socket.bind(address);
@@ -193,9 +192,11 @@ public class CypherServer implements Lifecycle {
 
         @Override
         public void run() {
-            while (running.get()) {
-                byte[] request = socket.recv(0);
+
+            while (!Thread.currentThread().isInterrupted() && running.get()) {
+
                 try {
+                    byte[] request = socket.recv (0);
                     final Object data = MsgPack.unpack(request, MsgPack.UNPACK_RAW_AS_STRING);
                     if (logger.isDebugEnabled()) {
                         logger.debug("Cypher Remoting, got query " + data);
@@ -222,18 +223,23 @@ public class CypherServer implements Lifecycle {
                         logger.debug("Cypher Remoting, result stats " + messagePack.createResultInfo());
                     }
 
+                } catch (ZMQException e) {
+                    if (e.getErrorCode () == ZMQ.Error.ETERM.getCode ()) {
+                        break;
+                    }
                 } catch (Exception e) {
                     logger.warn("Error during remote cypher execution ", e);
                     final Map<String, Object> result = map();
                     ExecutionResultMessagePack.addException(result, e);
                     socket.send(MsgPack.pack(result), 0);
                 }
+
             }
         }
 
         public void stop() {
             if (!running.get()) {
-                socket.close();
+                context.destroySocket(socket);
             }
         }
     }
